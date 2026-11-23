@@ -1,0 +1,99 @@
+# Pipeline 3: Migraciones programadas
+# - Corre por cron (ventana de mantenimiento) o manualmente.
+# - Solo migra si hay revisiones pendientes.
+# - Backup previo, migración, y restauración automática si falla.
+#
+# Secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY (environment production)
+# Opcional: SLACK_WEBHOOK_URL para notificar.
+
+name: 03 - Scheduled Migrations
+
+on:
+  schedule:
+    # Domingos 03:00 hora Bogotá (08:00 UTC)
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+      target_revision:
+        description: "Revisión Alembic destino (head por defecto)"
+        default: head
+      dry_run:
+        description: "Solo mostrar el SQL (no aplica cambios)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: migrations-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+env:
+  APP_DIR: /opt/flaskapp
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'production' }}
+    timeout-minutes: 30
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Ejecutar migración en EC2
+        id: run
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_DIR: ${{ env.APP_DIR }}
+          TARGET: ${{ inputs.target_revision || 'head' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: APP_DIR,TARGET,DRY_RUN
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            cd "$APP_DIR/app"
+            set -a; source <(sudo cat "$APP_DIR/.env"); set +a
+            FLASK="$APP_DIR/venv/bin/flask"
+
+            CURRENT=$($FLASK db current 2>/dev/null | awk '{print $1}' | tail -1)
+            HEAD=$($FLASK db heads | awk '{print $1}' | tail -1)
+            echo "Actual: ${CURRENT:-none} | Head: $HEAD | Destino: $TARGET"
+
+            if [ "$TARGET" = "head" ] && [ "$CURRENT" = "$HEAD" ]; then
+              echo "Sin migraciones pendientes."; exit 0
+            fi
+
+            if [ "$DRY_RUN" = "true" ]; then
+              $FLASK db upgrade "${CURRENT:-base}:$TARGET" --sql; exit 0
+            fi
+
+            # Backup
+            DB=$(echo "$DATABASE_URL" | sed -E 's#.*/([^/?]+).*#\1#')
+            U=$(echo "$DATABASE_URL" | sed -E 's#.*://([^:]+):.*#\1#')
+            export MYSQL_PWD=$(echo "$DATABASE_URL" | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')
+            BK="$APP_DIR/backups/scheduled-$(date +%Y%m%d-%H%M%S).sql.gz"
+            mysqldump -u"$U" -h127.0.0.1 --single-transaction --routines --no-tablespaces "$DB" | gzip > "$BK"
+            echo "Backup: $BK"
+
+            if ! $FLASK db upgrade "$TARGET"; then
+              echo "Migración falló -> restaurando backup"
+              gunzip -c "$BK" | mysql -u"$U" -h127.0.0.1 "$DB"
+              exit 1
+            fi
+
+            sudo systemctl restart flaskapp
+            sleep 5 && curl -fsS http://localhost/health
+            # Limpiar backups con más de 30 días
+            find "$APP_DIR/backups" -name '*.sql.gz' -mtime +30 -delete
+
+      - name: Notificar resultado
+        if: always() && env.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"Migración programada (${{ inputs.environment || 'production' }}): ${{ job.status }} - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            "$SLACK_WEBHOOK_URL"
