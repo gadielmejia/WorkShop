@@ -81,7 +81,9 @@ jobs:
         env:
           DATABASE_URL: "sqlite:///:memory:"
           SECRET_KEY: test
-        run: pytest tests/unit --cov=. --cov-report=xml --junitxml=unit-results.xml
+        run: |
+          export PYTHONPATH="$PWD/src"
+          pytest tests/unit --cov=. --cov-report=xml --junitxml=unit-results.xml
 
       - name: Guardar reportes de pruebas
         if: always()
@@ -127,7 +129,9 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-cov
 
       - name: Ejecutar pruebas de integración
-        run: pytest tests/integration --junitxml=integration-results.xml
+        run: |
+          export PYTHONPATH="$PWD/src"
+          pytest tests/integration --junitxml=integration-results.xml
 
       - name: Guardar reportes de pruebas
         if: always()
