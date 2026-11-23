@@ -60,6 +60,12 @@ jobs:
             set -a; source <(sudo cat "$APP_DIR/.env"); set +a
             FLASK="$APP_DIR/venv/bin/flask"
 
+            # Verificar si Flask-Migrate está disponible
+            if ! $FLASK db current >/dev/null 2>&1; then
+              echo "No hay configuración de migraciones Flask-Migrate. Saltando."
+              exit 0
+            fi
+
             CURRENT=$($FLASK db current 2>/dev/null | awk '{print $1}' | tail -1)
             HEAD=$($FLASK db heads | awk '{print $1}' | tail -1)
             echo "Actual: ${CURRENT:-none} | Head: $HEAD | Destino: $TARGET"
