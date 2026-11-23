@@ -24,6 +24,9 @@ concurrency:
 env:
   PYTHON_VERSION: "3.12"
   APP_DIR: /opt/flaskapp
+  # PYTHONPATH se establece explícitamente aquí para asegurar que
+  # pytest encuentre el módulo src.app en todos los pasos del job.
+  PYTHONPATH: src
 
 jobs:
   # ---------------------------------------------------------------
@@ -42,10 +45,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Configurar PYTHONPATH
-        run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
-          
 
       - name: Instalar herramientas de estilo
         run: pip install flake8 black isort
@@ -74,9 +73,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Configurar PYTHONPATH
-        run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 
       - name: Instalar dependencias
         run: pip install -r requirements.txt pytest pytest-cov
@@ -126,9 +122,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Configurar PYTHONPATH
-        run: echo "PYTHONPATH=$PWD/src" >> $GITHUB_ENV
 
       - name: Instalar dependencias
         run: pip install -r requirements.txt pytest pytest-cov
