@@ -24,9 +24,6 @@ concurrency:
 env:
   PYTHON_VERSION: "3.12"
   APP_DIR: /opt/flaskapp
-  # PYTHONPATH se establece explícitamente aquí para asegurar que
-  # pytest encuentre el módulo src.app en todos los pasos del job.
-  PYTHONPATH: src
 
 jobs:
   # ---------------------------------------------------------------
