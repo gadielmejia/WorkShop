@@ -82,7 +82,7 @@ jobs:
           DATABASE_URL: "sqlite:///:memory:"
           SECRET_KEY: test
         run: |
-          export PYTHONPATH="$PWD/src"
+          export PYTHONPATH="src"
           pytest tests/unit --cov=. --cov-report=xml --junitxml=unit-results.xml
 
       - name: Guardar reportes de pruebas
@@ -130,7 +130,7 @@ jobs:
 
       - name: Ejecutar pruebas de integración
         run: |
-          export PYTHONPATH="$PWD/src"
+          export PYTHONPATH="src"
           pytest tests/integration --junitxml=integration-results.xml
 
       - name: Guardar reportes de pruebas
