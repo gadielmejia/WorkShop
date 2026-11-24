@@ -74,13 +74,14 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt pytest pytest-cov
 
+      - name: Instalar paquete en modo editable
+        run: pip install -e .
+
       - name: Ejecutar pruebas unitarias
         env:
           DATABASE_URL: "sqlite:///:memory:"
           SECRET_KEY: test
-        run: |
-          export PYTHONPATH="src"
-          pytest tests/unit --cov=. --cov-report=xml --junitxml=unit-results.xml
+        run: pytest tests/unit --cov=. --cov-report=xml --junitxml=unit-results.xml
 
       - name: Guardar reportes de pruebas
         if: always()
@@ -125,10 +126,11 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt pytest pytest-cov
 
+      - name: Instalar paquete en modo editable
+        run: pip install -e .
+
       - name: Ejecutar pruebas de integración
-        run: |
-          export PYTHONPATH="src"
-          pytest tests/integration --junitxml=integration-results.xml
+        run: pytest tests/integration --junitxml=integration-results.xml
 
       - name: Guardar reportes de pruebas
         if: always()
