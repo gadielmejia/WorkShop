@@ -219,6 +219,43 @@ jobs:
       - name: Clonar el repositorio
         uses: actions/checkout@v4
 
+
+
+
+
+      - name: Diagnosticar llave SSH de GitHub
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -eu
+
+          KEY_FILE="$RUNNER_TEMP/ec2_test_key"
+
+          if [ -z "$SSH_KEY" ]; then
+            echo "ERROR: EC2_SSH_KEY está vacío o no está disponible."
+            exit 1
+          fi
+
+          printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          echo "Secreto SSH recibido correctamente."
+          echo "Validando formato de llave privada..."
+
+          if ssh-keygen -y -P "" -f "$KEY_FILE" > "$RUNNER_TEMP/public_key" 2>/dev/null; then
+            echo "Llave privada válida y sin passphrase."
+            ssh-keygen -lf "$RUNNER_TEMP/public_key"
+          else
+            echo "ERROR: No se pudo leer la llave privada."
+            echo "Puede tener formato incorrecto o estar protegida con passphrase."
+            exit 1
+          fi
+
+          rm -f "$KEY_FILE" "$RUNNER_TEMP/public_key"
+
+
+
+
       - name: Preparar carpeta de releases
         uses: appleboy/ssh-action@v1.2.0
         env:
