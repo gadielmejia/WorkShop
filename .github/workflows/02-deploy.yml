@@ -255,6 +255,33 @@ jobs:
 
 
 
+      - name: Verificar datos de conexión SSH
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -eu
+
+          echo "Usuario configurado: $SSH_USER"
+          echo "Host configurado: $SSH_HOST"
+
+          if [ -z "$SSH_HOST" ]; then
+            echo "ERROR: EC2_HOST está vacío"
+            exit 1
+          fi
+
+          if [ -z "$SSH_USER" ]; then
+            echo "ERROR: EC2_USER está vacío"
+            exit 1
+          fi
+
+          if [ -z "$SSH_KEY" ]; then
+            echo "ERROR: EC2_SSH_KEY está vacío"
+            exit 1
+          fi
+
+          
 
 
 
