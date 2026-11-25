@@ -284,10 +284,29 @@ jobs:
           
 
 
+      - name: Validar configuración de producción
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -eu
+
+          if [ "$SSH_USER" = "ubuntu" ]; then
+            echo "OK: usuario ubuntu"
+          else
+            echo "ERROR: el usuario no es ubuntu"
+          fi
+
+          if [ "$SSH_HOST" = "18.188.105.53" ]; then
+            echo "OK: host de producción"
+          else
+            echo "ERROR: el host no corresponde a producción"
+          fi
 
 
-      
-      - name: Depurar autenticación SSH
+
+
+      - name: Probar SSH con OpenSSH
         env:
           SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           SSH_HOST: ${{ secrets.EC2_HOST }}
@@ -299,19 +318,14 @@ jobs:
           printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          echo "Huella de la llave utilizada:"
-          ssh-keygen -y -f "$KEY_FILE" | ssh-keygen -lf -
-
-          echo "Iniciando conexión SSH detallada..."
-
-          ssh -vvv -i "$KEY_FILE" \
-            -o IdentitiesOnly=yes \
+          ssh -i "$KEY_FILE" \
             -o StrictHostKeyChecking=no \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
             "$SSH_USER@$SSH_HOST" \
-            "echo CONEXION_EXITOSA"
+            "echo 'SSH desde GitHub Actions funciona correctamente'"
 
+          rm -f "$KEY_FILE"
 
 
 
