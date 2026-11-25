@@ -61,23 +61,58 @@ jobs:
             CNF=$(mktemp); chmod 600 "$CNF"
             trap 'rm -f "$CNF"' EXIT
 
-            # Primera vez: root usa auth_socket -> fijar contraseña
-            if sudo mysql -e "SELECT 1" >/dev/null 2>&1; then
-              sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_ROOT_PASSWORD}';"
-            fi
-            printf "[client]\nuser=root\npassword=%s\n" "$MYSQL_ROOT_PASSWORD" > "$CNF"
+            # Configurar credenciales de MySQL
+            configure_mysql() {
+                local root_pwd="${MYSQL_ROOT_PASSWORD}"
+                local db_name="${DB_NAME}"
+                local db_user="${DB_USER}"
+                local db_pwd="${DB_PASSWORD}"
 
-            # Endurecimiento básico (equivalente a mysql_secure_installation)
-            mysql --defaults-extra-file="$CNF" <<SQL
-            DELETE FROM mysql.user WHERE User='';
-            DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost','127.0.0.1','::1');
-            DROP DATABASE IF EXISTS test;
-            CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-            CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-            ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
-            GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
-            FLUSH PRIVILEGES;
-            SQL
+                # Crear archivo de configuración temporal
+                printf "[client]\nuser=root\npassword=%s\n" "$root_pwd" > "$CNF"
+
+                # Verificar estado actual de MySQL y root
+                local mysql_status
+                mysql_status=$(sudo mysql --defaults-extra-file="$CNF" -e "SELECT 1" 2>&1 || echo "FAILED")
+
+                # Si MySQL no responde, iniciar el servicio
+                if echo "$mysql_status" | grep -q "FAILED"; then
+                    echo "Iniciando MySQL..."
+                    sudo systemctl start mysql 2>/dev/null || true
+                    sleep 2
+                fi
+
+                # Verificar autenticación actual de root
+                local auth_method
+                auth_method=$(sudo mysql --defaults-extra-file="$CNF" -e "SELECT plugin FROM mysql.user WHERE User='root' AND Host='localhost';" 2>&1 || echo "UNKNOWN")
+
+                # Si root usa auth_socket, cambiar a caching_sha2_password con la contraseña proporcionada
+                if echo "$auth_method" | grep -qi "auth_socket"; then
+                    echo "Root usa auth_socket. Configurando contraseña..."
+                    sudo mysql --defaults-extra-file="$CNF" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${root_pwd}';"
+                elif echo "$auth_method" | grep -qi "caching_sha2_password"; then
+                    # Ya usa caching_sha2_password, verificar si la contraseña coincide
+                    local current_pwd
+                    current_pwd=$(sudo mysql --defaults-extra-file="$CNF" -e "ALTER USER 'root'@'localhost';" 2>&1 || echo "")
+                    # Intentar cambiar la contraseña si es necesario
+                    sudo mysql --defaults-extra-file="$CNF" -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${root_pwd}';" 2>/dev/null || true
+                fi
+                # Si root tiene otro método, intentar configurar contraseña directamente
+                sudo mysql --defaults-extra-file="$CNF" -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${root_pwd}';" 2>/dev/null || true
+
+                # Crear base de datos y usuario
+                sudo mysql --defaults-extra-file="$CNF" <<SQL
+                DELETE FROM mysql.user WHERE User='';
+                DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost','127.0.0.1','::1');
+                DROP DATABASE IF EXISTS test;
+                CREATE DATABASE IF NOT EXISTS \`${db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+                CREATE USER IF NOT EXISTS '${db_user}'@'localhost' IDENTIFIED BY '${db_pwd}';
+                GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_user}'@'localhost';
+                FLUSH PRIVILEGES;
+                SQL
+            }
+
+            configure_mysql
 
             # MySQL solo escucha en localhost
             sudo sed -i 's/^bind-address.*/bind-address = 127.0.0.1/' /etc/mysql/mysql.conf.d/mysqld.cnf
