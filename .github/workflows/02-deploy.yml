@@ -256,6 +256,32 @@ jobs:
 
 
 
+
+
+
+      - name: Probar SSH con OpenSSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -eu
+
+          KEY_FILE="$RUNNER_TEMP/ec2_test_key"
+          printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          ssh -i "$KEY_FILE" \
+            -o StrictHostKeyChecking=no \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            "$SSH_USER@$SSH_HOST" \
+            "echo 'SSH desde GitHub Actions funciona correctamente'"
+
+          rm -f "$KEY_FILE"
+
+
+
       - name: Preparar carpeta de releases
         uses: appleboy/ssh-action@v1.2.0
         env:
