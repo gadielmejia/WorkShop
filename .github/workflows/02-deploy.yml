@@ -286,7 +286,8 @@ jobs:
 
 
 
-      - name: Probar SSH con OpenSSH
+      
+      - name: Depurar autenticación SSH
         env:
           SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           SSH_HOST: ${{ secrets.EC2_HOST }}
@@ -298,14 +299,19 @@ jobs:
           printf '%s\n' "$SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          ssh -i "$KEY_FILE" \
+          echo "Huella de la llave utilizada:"
+          ssh-keygen -y -f "$KEY_FILE" | ssh-keygen -lf -
+
+          echo "Iniciando conexión SSH detallada..."
+
+          ssh -vvv -i "$KEY_FILE" \
+            -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=no \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
             "$SSH_USER@$SSH_HOST" \
-            "echo 'SSH desde GitHub Actions funciona correctamente'"
+            "echo CONEXION_EXITOSA"
 
-          rm -f "$KEY_FILE"
 
 
 
