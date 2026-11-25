@@ -101,7 +101,7 @@ jobs:
                 sudo mysql --defaults-extra-file="$CNF" -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${root_pwd}';" 2>/dev/null || true
 
                 # Crear base de datos y usuario
-                sudo mysql --defaults-extra-file="$CNF" <<SQL
+                                sudo mysql --defaults-extra-file="$CNF" <<SQL
                 DELETE FROM mysql.user WHERE User='';
                 DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost','127.0.0.1','::1');
                 DROP DATABASE IF EXISTS test;
@@ -109,7 +109,7 @@ jobs:
                 CREATE USER IF NOT EXISTS '${db_user}'@'localhost' IDENTIFIED BY '${db_pwd}';
                 GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_user}'@'localhost';
                 FLUSH PRIVILEGES;
-                SQL
+            SQL
             }
 
             configure_mysql
