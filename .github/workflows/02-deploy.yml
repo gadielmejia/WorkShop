@@ -284,26 +284,27 @@ jobs:
           
 
 
-      - name: Validar configuración de producción
+      - name: Validar configuración del entorno
         env:
           SSH_HOST: ${{ secrets.EC2_HOST }}
           SSH_USER: ${{ secrets.EC2_USER }}
         run: |
           set -eu
 
-          if [ "$SSH_USER" = "ubuntu" ]; then
-            echo "OK: usuario ubuntu"
-          else
-            echo "ERROR: el usuario no es ubuntu"
+          if [ "$SSH_USER" != "ubuntu" ]; then
+            echo "ERROR: el usuario SSH debe ser ubuntu"
+            exit 1
           fi
 
-          if [ "$SSH_HOST" = "18.188.105.53" ]; then
-            echo "OK: host de producción"
-          else
-            echo "ERROR: el host no corresponde a producción"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            if [ "$SSH_HOST" != "18.188.105.53" ]; then
+              echo "ERROR: el host no corresponde a producción"
+              exit 1
+            fi
+            echo "OK: configuración de producción"
+          elif [ "${{ github.ref_name }}" = "develop" ]; then
+            echo "OK: configuración de staging"
           fi
-
-
 
 
       - name: Probar SSH con OpenSSH
@@ -366,37 +367,51 @@ jobs:
             set -euo pipefail
             REL="$APP_DIR/releases/$SHA"
 
-            # 1. Dependencias en el entorno virtual del servidor (como el usuario dueño del venv)
-            sudo -u flaskapp "$APP_DIR/venv/bin/pip" install -q -r "$REL/requirements.txt"
+            # 1. Instalar dependencias en el entorno virtual compartido
+            sudo "$APP_DIR/shared/venv/bin/pip" install -q -r "$REL/requirements.txt"
 
-            # 2. Recordar la release activa, para poder volver a ella
+            # 2. Asegurar permisos de lectura para flaskapp
+            sudo chmod -R a+rX "$REL"
+
+            # 3. Guardar la release anterior para rollback
             PREV=""
             if [ -L "$APP_DIR/app" ]; then
               PREV=$(readlink -f "$APP_DIR/app")
             else
-              sudo rm -rf "$APP_DIR/app"   # primera vez: era una carpeta vacía
+              sudo rm -rf "$APP_DIR/app"
             fi
 
-            # 3. Activar la release nueva y reiniciar Gunicorn
+            # 4. Activar la nueva release
             ln -sfn "$REL" "$APP_DIR/app"
+
+            # 5. Reiniciar Gunicorn
             sudo systemctl restart flaskapp
 
-            # 4. Health check: hasta 6 intentos, 5 segundos entre cada uno
+            # 6. Verificar que la aplicación responda
             for i in 1 2 3 4 5 6; do
               sleep 5
-              if curl -fsS http://localhost/health; then
+
+              if curl -fsS http://localhost:8000/health; then
                 echo
-                echo "Release $SHA activa"
-                # Conservar solo las 5 últimas releases
+                echo "Release $SHA activa correctamente"
+
+                # Conservar las últimas 5 releases
                 ls -1dt "$APP_DIR"/releases/* | tail -n +6 | xargs -r rm -rf
+
                 exit 0
               fi
             done
 
-            # 5. Rollback: volver a la release anterior
-            echo "Health check falló -> rollback a ${PREV:-ninguna}"
+            # 7. Si falla, regresar a la versión anterior
+            echo "ERROR: Falló el health check"
+
             if [ -n "$PREV" ] && [ "$PREV" != "$REL" ]; then
+              echo "Restaurando release anterior: $PREV"
               ln -sfn "$PREV" "$APP_DIR/app"
               sudo systemctl restart flaskapp
+            else
+              echo "No existe una release anterior para restaurar"
+              rm -f "$APP_DIR/app"
             fi
+
             exit 1
