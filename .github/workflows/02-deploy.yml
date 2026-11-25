@@ -211,9 +211,9 @@ jobs:
   deploy:
     name: Deploy
     needs: integration-tests
-    # needs: e2e-tests        # <- usa esta línea en lugar de la anterior al activar E2E
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - name: Clonar el repositorio
